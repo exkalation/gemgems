@@ -73,33 +73,37 @@ update msg model =
                     ({ model | gems = x }, Cmd.none)
 
             DragStart (k, v) ->
-                let
-                    dbg = Debug.log "DRAG_START" v
-                    gem = case (Dict.get k model.gems) of
-                        Just x -> x
-                        Nothing -> Debug.crash "Not possible: DragStart"
-                    m1 = (unhighlight model)
-                in
-                    ({ m1 | gems = highlightDraged k m1.gems, dragged = Just (k, v, gem) }, Cmd.none)
+                if model.dragged /= Nothing then (model, Cmd.none)
+                else
+                    let
+                        dbg = Debug.log "DRAG_START" v
+                        gem = case (Dict.get k model.gems) of
+                            Just x -> x
+                            Nothing -> Debug.crash "Not possible: DragStart"
+                        m1 = (unhighlight model)
+                    in
+                        ({ m1 | gems = highlightDraged k m1.gems, dragged = Just (k, v, gem) }, Cmd.none)
 
             DragEnd (k, v) ->
-                let
-                    dbg = Debug.log "DRAG_END" v
-                    --ne = neighbor v NE
-                    --e = neighbor v E
-                    --dbg2 = Debug.log "NEIGHBORS" [ (v, HexMap.hashHex v), (ne, HexMap.hashHex ne), (e, HexMap.hashHex e) ]
-                    targetGem = case (Dict.get k model.gems) of
-                        Just x -> x
-                        Nothing -> Gem.Empty
-                    (draggedHash, draggedHex, draggedGem) = getDragged model
-                    m1 =
-                        if (Hex.distance draggedHex v) == 1 && (draggedGem /= targetGem) then
-                            swapGems (k, v) model
-                                |> eliminateFrom (k, v)
-                                |> eliminateFrom (draggedHash, draggedHex)
-                        else unhighlight model
-                in
-                    ({ m1 | dragged = Nothing }, Cmd.none)
+                if model.dragged == Nothing then (model, Cmd.none)
+                else
+                    let
+                        dbg = Debug.log "DRAG_END" v
+                        --ne = neighbor v NE
+                        --e = neighbor v E
+                        --dbg2 = Debug.log "NEIGHBORS" [ (v, HexMap.hashHex v), (ne, HexMap.hashHex ne), (e, HexMap.hashHex e) ]
+                        targetGem = case (Dict.get k model.gems) of
+                            Just x -> x
+                            Nothing -> Gem.Empty
+                        (draggedHash, draggedHex, draggedGem) = getDragged model
+                        m1 =
+                            if (Hex.distance draggedHex v) == 1 && (draggedGem /= targetGem) then
+                                swapGems (k, v) model
+                                    |> eliminateFrom (k, v)
+                                    |> eliminateFrom (draggedHash, draggedHex)
+                            else unhighlight model
+                    in
+                        ({ m1 | dragged = Nothing }, Cmd.none)
 
 runElimination model =
     Dict.toList model.grid
