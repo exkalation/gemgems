@@ -4,6 +4,7 @@ import Json.Decode as Json exposing (succeed)
 import Svg exposing (..)
 import Svg.Attributes as SvgA exposing (..)
 import Svg.Events as SvgE exposing (..)
+import Gem exposing (..)
 
 
 base : String
@@ -23,14 +24,14 @@ drawContainer =
 
 shapeTypeToColor gemType =
     case gemType of
-        Just 1 -> "#9B111E" -- ruby red #9B111E / red #f00
-        Just 2 -> "#0c0" -- emerald #50C878 / green #0c0
-        Just 3 -> "#0F52BA" -- sapphire #0F52BA / blue #07a
-        Just 4 -> "#ff0" -- yellow
-        Just 5 -> "#f30" -- orange
-        Just 6 -> "#60c" -- violet
-        Just 9 -> "#fff" -- dragged
-        Just 10 -> "#aaa" -- eliminated/empty
+        Just (Gem.Color 1) -> "#9B111E" -- ruby red #9B111E / red #f00
+        Just (Gem.Color 2) -> "#0c0" -- emerald #50C878 / green #0c0
+        Just (Gem.Color 3) -> "#0F52BA" -- sapphire #0F52BA / blue #07a
+        Just (Gem.Color 4) -> "#ff0" -- yellow
+        Just (Gem.Color 5) -> "#f30" -- orange
+        Just (Gem.Color 6) -> "#60c" -- violet
+        Just Gem.Dragged -> "#fff" -- dragged
+        Just Gem.Empty -> "#aaa" -- eliminated/empty
         Nothing -> "#000"
         default -> Debug.crash "Unhandled shape tpye!"
 

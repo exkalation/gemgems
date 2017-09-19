@@ -7,6 +7,7 @@ import Html.Events exposing (..)
 import Random
 import Dict
 import RenderSvg as Render exposing (..)
+import Gem exposing (..)
 
 import Hexagons.Map as HexMap exposing (..)
 import Hexagons.Layout as HexL exposing (Orientation, orientationLayoutPointy, Point)
@@ -25,10 +26,10 @@ main =
 -- MODEL
 
 type alias Model =
-    { gems : Dict.Dict HexMap.Hash Int
+    { gems : Dict.Dict HexMap.Hash Gem.Gem
     , grid: HexMap.Map
     , layout: HexL.Layout
-    , dragged: Maybe (HexMap.Hash, Hex, Int)
+    , dragged: Maybe (HexMap.Hash, Hex, Gem.Gem)
     }
 
 init : (Model, Cmd Msg)
@@ -67,19 +68,19 @@ update msg model =
 
             NewFace (a, b, c) newFace ->
                 let
-                    x = Dict.insert (a, b, c) newFace model.gems
+                    x = Dict.insert (a, b, c) (Gem.Color newFace) model.gems
                 in
                     ({ model | gems = x }, Cmd.none)
 
             DragStart (k, v) ->
                 let
                     dbg = Debug.log "DRAG_START" v
-                    gemType = case (Dict.get k model.gems) of
+                    gem = case (Dict.get k model.gems) of
                         Just x -> x
                         Nothing -> Debug.crash "Not possible: DragStart"
                     m1 = (unhighlight model)
                 in
-                    ({ m1 | gems = highlightDraged k m1.gems, dragged = Just (k, v, gemType) }, Cmd.none)
+                    ({ m1 | gems = highlightDraged k m1.gems, dragged = Just (k, v, gem) }, Cmd.none)
 
             DragEnd (k, v) ->
                 let
@@ -87,12 +88,12 @@ update msg model =
                     --ne = neighbor v NE
                     --e = neighbor v E
                     --dbg2 = Debug.log "NEIGHBORS" [ (v, HexMap.hashHex v), (ne, HexMap.hashHex ne), (e, HexMap.hashHex e) ]
-                    targetGemType = case (Dict.get k model.gems) of
+                    targetGem = case (Dict.get k model.gems) of
                         Just x -> x
-                        Nothing -> 0
-                    (draggedHash, draggedHex, draggedGemType) = getDragged model
+                        Nothing -> Gem.Empty
+                    (draggedHash, draggedHex, draggedGem) = getDragged model
                     m1 =
-                        if (Hex.distance draggedHex v) == 1 && (draggedGemType /= targetGemType) then
+                        if (Hex.distance draggedHex v) == 1 && (draggedGem /= targetGem) then
                             swapGems (k, v) model
                                 |> eliminateFrom (k, v)
                                 |> eliminateFrom (draggedHash, draggedHex)
@@ -106,48 +107,53 @@ runElimination model =
 
 eliminateFrom (hash, hex) model =
     let
-        gemType = Debug.log "ELIMINATEFROM" (getGemType hash model.gems)
+        gem = Debug.log "ELIMINATEFROM" (getGem hash model.gems)
     in
-        scan model gemType hex []
-            |> eliminateFound model
+        if Gem.isColor gem then
+            scan model gem hex []
+                |> eliminateFound model
+        else model
 
 eliminateFound model found =
     let
         x = Debug.log "TO BE ELIMIATED" found
     in
-        if (List.length found) > 2 then { model | gems = model.grid
-            |> Dict.map (\hash hex -> if List.member hex found then 10 else (getGemType hash model.gems))
-            --|> Dict.fromList
-        }
+        if (List.length found) > 2 then
+            { model | gems = model.grid
+                |> Dict.map (\hash hex ->
+                    if List.member hex found then Gem.Empty
+                    else (getGem hash model.gems))
+                --|> Dict.fromList
+            }
         else model
 
-scan model scanGemType fromHex found =
+scan model scanGem fromHex found =
     let
         x = Debug.log "SCAN" (fromHex, found)
         visited = List.member fromHex found
         fromHash = HexMap.hashHex fromHex
         candidate = (not visited) && case (Dict.get fromHash model.gems) of
-            Just x -> x == scanGemType
+            Just x -> x == scanGem
             Nothing -> False -- we reached the border...
         f = if candidate then fromHex :: found else found
     in
         --if List.filter found  |> List.length > 0
         if candidate then f
-            |> scan model scanGemType (neighbor fromHex NE)
-            |> scan model scanGemType (neighbor fromHex E)
-            |> scan model scanGemType (neighbor fromHex SE)
-            |> scan model scanGemType (neighbor fromHex SW)
-            |> scan model scanGemType (neighbor fromHex W)
-            |> scan model scanGemType (neighbor fromHex NW)
+            |> scan model scanGem (neighbor fromHex NE)
+            |> scan model scanGem (neighbor fromHex E)
+            |> scan model scanGem (neighbor fromHex SE)
+            |> scan model scanGem (neighbor fromHex SW)
+            |> scan model scanGem (neighbor fromHex W)
+            |> scan model scanGem (neighbor fromHex NW)
         else f
 
 swapGems (hashTarget, _) model =
     let
-        (hashDragged, _, gemTypeDragged) = getDragged model
-        gemTypeTarget = getGemType hashTarget model.gems
+        (hashDragged, _, gemDragged) = getDragged model
+        gemTarget = getGem hashTarget model.gems
         gems1 = model.gems
-            |> Dict.insert hashDragged gemTypeTarget
-            |> Dict.insert hashTarget gemTypeDragged
+            |> Dict.insert hashDragged gemTarget
+            |> Dict.insert hashTarget gemDragged
     in
         Debug.log "MODEL" { model | gems = gems1 }
 
@@ -161,14 +167,14 @@ getDragged model =
 --        Just hex -> hex
 --        Nothing -> Debug.crash "Not possible: getHex"
 
-getGemType hash gems =
+getGem hash gems =
     case (Dict.get hash gems) of
-       Just gemType -> gemType
-       Nothing -> Debug.crash ("Not possible: getGemType " ++ (toString hash) ++ (toString gems))
+       Just gem -> gem
+       Nothing -> Debug.crash ("Not possible: getGem " ++ (toString hash) ++ (toString gems))
 
 unhighlight model =
     { model | gems = case model.dragged of
-         Just (hash, hex, gemType) -> Dict.insert hash gemType model.gems
+         Just (hash, hex, gem) -> Dict.insert hash gem model.gems
          Nothing -> model.gems, dragged = Nothing
      }
 
@@ -179,7 +185,7 @@ rollAll hexMap =
         |> Cmd.batch
 
 highlightDraged draggedHash gems =
-    Dict.insert draggedHash 9 gems
+    Dict.insert draggedHash Gem.Dragged gems
 
 
 -- VIEW
