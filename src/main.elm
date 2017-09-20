@@ -101,9 +101,75 @@ update msg model =
                                 swapGems (k, v) model
                                     |> eliminateFrom (k, v)
                                     |> eliminateFrom (draggedHash, draggedHex)
+                                    |> dropIt
                             else unhighlight model
                     in
                         ({ m1 | dragged = Nothing }, Cmd.none)
+
+
+getBottomLine model =
+    getBottom (IntCubeHex (0,0,0)) model
+
+getBottom hex model =
+    let
+        dbg = Debug.log "going..." hex
+        upLeft = Dict.get (neighbor hex SE |> hashHex) model.gems
+        up = Dict.get (neighbor hex SW |> hashHex) model.gems
+        upRight = Dict.get (neighbor hex W |> hashHex) model.gems
+        downRight = Dict.get (neighbor hex NW |> hashHex) model.gems
+        down = Dict.get (neighbor hex NE |> hashHex) model.gems
+        downLeft = Dict.get (neighbor hex E |> hashHex) model.gems
+    in
+        if upLeft /= Nothing && down /= Nothing then
+            getBottom (neighbor hex SE) model -- go upLeft
+        else if upLeft == Nothing && up == Nothing && downLeft /= Nothing then
+            getBottom (neighbor hex E) model -- go downLeft
+        else if upLeft == Nothing && down /= Nothing && downLeft == Nothing then
+            getBottom (neighbor hex NE) model -- go down
+        else if up /= Nothing && down == Nothing && downRight /= Nothing then
+            hex :: getBottom (neighbor hex NW) model -- go downRight
+        else if upLeft /= Nothing && up /= Nothing && down == Nothing && downRight == Nothing then -- = bottom line, lower
+            hex :: getBottom (neighbor hex W) model -- go upRight
+        else
+            [] -- end
+
+dropIt model =
+    let
+        gem = Debug.log "DROPIT" (neighbor (IntCubeHex (7,0,-7)) NE)
+    in
+        refillGrid (getBottomLine model) model
+
+refillGrid hexes model =
+    case hexes of
+        [] -> model
+        hex::rest -> refillCol hex model |> refillGrid rest
+
+refillCol colBottomHex model =
+    let
+        hexUp = getGridUp colBottomHex
+        gem = Dict.get (HexMap.hashHex colBottomHex) model.gems
+    in
+        case gem of
+            Just (Gem.Color c) -> refillCol hexUp model
+            Just (Gem.Empty) -> findDrop colBottomHex hexUp model |> refillCol hexUp
+            default -> model -- border reached
+
+findDrop dropToHex checkHex model =
+    let
+        up = getGridUp checkHex
+        dbg = Debug.log "HEREEE0" (dropToHex, checkHex)
+        gem = Dict.get (HexMap.hashHex checkHex) model.gems
+    in
+        case gem of
+            Just (Gem.Color c) -> Debug.log "HEREEE1" { model | gems = (setGemFromHex dropToHex (Gem.Color c) model.gems |> setGemFromHex checkHex (Gem.Empty)) }
+            Just (Gem.Empty) -> findDrop dropToHex up model
+            default -> model -- border reached
+
+setGemFromHex hex gem gems =
+    Dict.insert (HexMap.hashHex hex) gem gems
+
+getGridUp hex =
+    neighbor hex SW
 
 runElimination model =
     Dict.toList model.grid
@@ -111,7 +177,7 @@ runElimination model =
 
 eliminateFrom (hash, hex) model =
     let
-        gem = Debug.log "ELIMINATEFROM" (getGem hash model.gems)
+        gem = Debug.log "ELIMINATEFROM" (getExistingGem hash model.gems)
     in
         if Gem.isColor gem then
             scan model gem hex []
@@ -126,14 +192,14 @@ eliminateFound model found =
             { model | gems = model.grid
                 |> Dict.map (\hash hex ->
                     if List.member hex found then Gem.Empty
-                    else (getGem hash model.gems))
+                    else (getExistingGem hash model.gems))
                 --|> Dict.fromList
             }
         else model
 
 scan model scanGem fromHex found =
     let
-        x = Debug.log "SCAN" (fromHex, found)
+        --x = Debug.log "SCAN" (fromHex, found)
         visited = List.member fromHex found
         fromHash = HexMap.hashHex fromHex
         candidate = (not visited) && case (Dict.get fromHash model.gems) of
@@ -154,12 +220,12 @@ scan model scanGem fromHex found =
 swapGems (hashTarget, _) model =
     let
         (hashDragged, _, gemDragged) = getDragged model
-        gemTarget = getGem hashTarget model.gems
+        gemTarget = getExistingGem hashTarget model.gems
         gems1 = model.gems
             |> Dict.insert hashDragged gemTarget
             |> Dict.insert hashTarget gemDragged
     in
-        Debug.log "MODEL" { model | gems = gems1 }
+        { model | gems = gems1 }
 
 getDragged model =
     case model.dragged of
@@ -171,7 +237,7 @@ getDragged model =
 --        Just hex -> hex
 --        Nothing -> Debug.crash "Not possible: getHex"
 
-getGem hash gems =
+getExistingGem hash gems =
     case (Dict.get hash gems) of
        Just gem -> gem
        Nothing -> Debug.crash ("Not possible: getGem " ++ (toString hash) ++ (toString gems))
@@ -185,8 +251,11 @@ unhighlight model =
 rollAll hexMap =
     hexMap
         |> Dict.keys
-        |> List.map (\x -> Random.generate (NewFace x) (Random.int 1 6))
+        |> List.map rollHex
         |> Cmd.batch
+
+rollHex hash =
+    Random.generate (NewFace hash) (Random.int 1 6)
 
 highlightDraged draggedHash gems =
     Dict.insert draggedHash Gem.Dragged gems
