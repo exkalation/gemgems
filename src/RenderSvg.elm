@@ -13,9 +13,6 @@ base =
     |> List.map (\(a, b) -> (toString a) ++ "," ++ (toString b))
     |> String.join ", "
 
-onMouseLeave msg =
-    on "mouseLeave" (Json.succeed msg)
-
 drawContainer =
     svg [ width "600", height "600", viewBox "0 0 600 600" ]
 
