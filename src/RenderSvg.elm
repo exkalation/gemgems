@@ -13,8 +13,7 @@ base =
     --[ (32.500,0.000), (16.250,28.146), (-16.250,28.146), (-32.500,0.000), (-16.250,-28.146), (16.250,-28.146) ]
         --|> List.map (\(a, b) -> (toString (0.95*a + dx)) ++ "," ++ (toString (0.95*b + dy)))
         |> List.map (\(a, b) -> (toString a) ++ "," ++ (toString b))
-        --|> String.join "," --<<-- try!!
-        |> List.foldl (\a b -> if b /= "" then a ++ " " ++ b else a) ""
+        |> String.join ","
 
 onMouseLeave msg =
     on "mouseLeave" (Json.succeed msg)
