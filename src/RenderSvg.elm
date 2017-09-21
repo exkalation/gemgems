@@ -29,7 +29,9 @@ shapeTypeToColor gemType =
         Just (Gem.Color 3) -> "#0F52BA" -- sapphire #0F52BA / blue #07a
         Just (Gem.Color 4) -> "#ff0" -- yellow
         Just (Gem.Color 5) -> "#f30" -- orange
-        Just (Gem.Color 6) -> "#60c" -- violet
+        Just (Gem.Color 6) -> "#909" -- violet
+        Just (Gem.Color 7) -> "#963" -- ??
+        Just (Gem.Color 8) -> "#06c" -- ??
         Just Gem.Dragged -> "#fff" -- dragged
         Just Gem.Empty -> "#aaa" -- eliminated/empty
         Nothing -> "#000"
