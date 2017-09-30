@@ -1,6 +1,6 @@
 module Gem exposing (..)
 
-type Gem = Empty | Dragged | Color Int
+type Gem = Empty | Dragged | Matched Int | Color Int
 
 isColor gem =
     case (gem) of
@@ -9,4 +9,11 @@ isColor gem =
 isDragged gem =
     gem == Dragged
 isEmpty gem =
-    gem == Empty
+    case gem of
+        Empty -> True
+        Matched _ -> True
+        default -> False
+colorToMatched gem =
+    case gem of
+         Color x -> Matched x
+         default -> Debug.crash "colorToMatched - gem must be a color!" -- Gem.Empty

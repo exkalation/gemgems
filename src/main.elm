@@ -7,15 +7,21 @@ import Html.Attributes as HtmlA exposing (id)
 import Html.Events exposing (..)
 import Random
 import Dict
+
+import Hexagons.Map as HexMap
+import Hexagons.Layout as HexL
+import Hexagons.Hex as Hex exposing (Direction(..))
+
 import RenderSvg as Render exposing (..)
-import Gem exposing (..)
+import Gem
+import Grid
 
-import Hexagons.Map as HexMap exposing (..)
-import Hexagons.Layout as HexL exposing (Orientation, orientationLayoutPointy, Point)
-import Hexagons.Hex as Hex exposing (..)
-
-minMatchLength = 3
-numberOfGems = 6
+configTickDelayMs = 2*100
+minMatchLength = 4
+numberOfGems = 7
+lengthToScore len =
+    if len <= minMatchLength then len
+    else len + (len - minMatchLength) * 5
 
 main =
     Html.program
@@ -32,25 +38,26 @@ type alias Model =
     { gems : Dict.Dict HexMap.Hash Gem.Gem
     , grid: HexMap.Map
     , layout: HexL.Layout
-    , dragged: Maybe (HexMap.Hash, Hex, Gem.Gem)
+    , dragged: Maybe (Hex.Hex, Gem.Gem)
     , dirty: Bool
     , bottomLine: List Hex.Hex
+    , score: Int
     }
 
 init : (Model, Cmd Msg)
 init =
     let
-        grid = (rectangularPointyTopMap 6 7)
+        grid = (HexMap.rectangularPointyTopMap 5 6) --6 7
     in
         (Model
             Dict.empty
             grid
-            (HexL.Layout (orientationLayoutPointy) (38, 38) (0, 0))
+            (HexL.Layout (HexL.orientationLayoutPointy) (38, 38) (0, 0))
             Nothing
             False
             []
+            0
         , rollAll grid)
-
 
 
 -- UPDATE
@@ -58,8 +65,8 @@ init =
 type Msg
     = Roll
    | NewFace HexMap.Hash Int
-   | DragStart (HexMap.Hash, Hex)
-   | DragEnd (HexMap.Hash, Hex)
+   | DragStart (HexMap.Hash, Hex.Hex)
+   | DragEnd (HexMap.Hash, Hex.Hex)
    | Tick Time
 
 
@@ -67,7 +74,7 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model0 =
     let
         model =
-            if List.isEmpty model0.bottomLine then {model0 | bottomLine = getBottom (IntCubeHex (0,0,0)) model0.gems }
+            if List.isEmpty model0.bottomLine then {model0 | bottomLine = buildBottomLine (Hex.IntCubeHex (0,0,0)) model0.gems }
             else model0
     in
         case msg of
@@ -75,86 +82,99 @@ update msg model0 =
                 ({model | dirty = True }, rollAll model.grid)
 
             NewFace (a, b, c) newFace ->
-                let
-                    x = Dict.insert (a, b, c) (Gem.Color newFace) model.gems
-                in
-                    ({ model | dirty = True, gems = x }, Cmd.none)
+                ({ model | dirty = True, gems = Dict.insert (a, b, c) (Gem.Color newFace) model.gems }, Cmd.none)
 
-            DragStart (k, v) ->
-                if model.dirty || model.dragged /= Nothing then (model, Cmd.none)
+            DragStart (_, hex) ->
+                if model.dirty || model.dragged /= Nothing then
+                    Debug.log "XXX" (model, Cmd.none)
                 else
-                    let
-                        dbg = Debug.log "DRAG_START" v
-                        gem = case (Dict.get k model.gems) of
-                            Just x -> x
-                            Nothing -> Debug.crash "Not possible: DragStart"
-                        m1 = (unhighlight model)
-                    in
-                        ({ m1 | gems = highlightDraged k m1.gems, dragged = Just (k, v, gem) }, Cmd.none)
+                    handleDragStart hex model
 
-            DragEnd (k, v) ->
-                let
-                    m1 = unhighlight model
-                in
-                case model.dragged of
-                    Just (kx, vx, _) ->
-                        if model.dragged == Nothing || (kx == k && vx == v) then ({ m1 | dragged = Nothing }, Cmd.none)
-                        else
-                            let
-                                dbg = Debug.log "DRAG_END" v
-                                targetGem = case (Dict.get k model.gems) of
-                                    Just x -> x
-                                    Nothing -> Gem.Empty
-                                (draggedHash, draggedHex, draggedGem) = getDragged model
-                                m1 =
-                                    if (Hex.distance draggedHex v) == 1 && (draggedGem /= targetGem) then
-                                        swapGems (k, v) model
-                                            |> eliminateFrom (k, v)
-                                            |> eliminateFrom (draggedHash, draggedHex)
-                                            |> dropIt model.bottomLine
-                                    else unhighlight model
-                            in
-                                ({ m1 | dirty = True, dragged = Nothing }, Cmd.batch <| recolorGrid m1.gems)
-                    default -> ({ m1 | dragged = Nothing }, Cmd.none)
+            DragEnd (_, hex) ->
+                handleDragEnd hex model
 
             Tick time ->
                 if model.dirty then
                     let
-                        m1 = runElimination (Dict.toList model.grid) model |> dropIt model.bottomLine
+                        m0 = model -- do it backwards, to only do one step per tick
+                        m1 = markMatchedEmpty m0
+                        m2 = if m1.gems == m0.gems then dropIt model.bottomLine m0 else m1
+                        cmds = if m2.gems == m0.gems then recolorGrid m0.gems else []
+                        m3 = if m2.gems == m0.gems && List.isEmpty cmds then runElimination (Dict.toList model.grid) m0 else m2
                     in
-                        ({ m1 | dirty = False }, Cmd.batch <| recolorGrid m1.gems)
+                        ({ m3 | dirty = isDirty model }, Cmd.batch cmds)
                 else (model, Cmd.none)
 
+handleDragStart hex model =
+    let
+        dbg = Debug.log "DRAG_START" hex
+        gem = case (Dict.get (HexMap.hashHex hex) model.gems) of
+            Just x -> x
+            Nothing -> Debug.crash "Not possible: DragStart"
+        m1 = (unhighlight model)
+    in
+        ({ m1 | gems = highlightDraged hex m1.gems, dragged = Just (hex, gem) }, Cmd.none)
+
+handleDragEnd hex model =
+    let
+        dbg = Debug.log "DRAG_END (1)" {hex = hex, dragged = model.dragged }
+        m1 = unhighlight model
+    in
+    case model.dragged of
+        Just (draggedHex, draggedGem) ->
+            if draggedHex == hex then
+                ({ m1 | dragged = Nothing }, Cmd.none)
+            else
+                let
+                    dbg = Debug.log "DRAG_END" hex
+                    targetGem = case (Dict.get (HexMap.hashHex hex) model.gems) of
+                        Just x -> x
+                        Nothing -> Gem.Empty
+                    m1 =
+                        if (Hex.distance draggedHex hex) == 1 && (draggedGem /= targetGem) then
+                            swapGems draggedGem targetGem draggedHex hex model
+                        else unhighlight model
+                in
+                    ({ m1 | dirty = True, dragged = Nothing }, Cmd.none)
+        default -> ({ m1 | dragged = Nothing }, Cmd.none)
+
+markMatchedEmpty model =
+    { model | gems = (Dict.map (\_ gem -> case gem of
+        Gem.Matched _ -> Gem.Empty
+        default -> gem) model.gems)}
+
+isDirty model =
+    (Dict.values model.gems
+    |> List.any Gem.isEmpty) || model /= (runElimination (Dict.toList model.grid) model)
 
 recolorGrid gems =
-    Dict.filter (\hash gem -> isEmpty gem) gems
+    Dict.filter (\hash gem -> Gem.isEmpty gem) gems
     |> Dict.keys
     |> List.map rollHex
 
-getBottom : Hex.Hex -> Dict.Dict HexMap.Hash Gem -> List Hex.Hex
-getBottom hex gems =
+buildBottomLine : Hex.Hex -> Dict.Dict HexMap.Hash Gem.Gem -> List Hex.Hex
+buildBottomLine hex gems =
     let
-        --dbg = Debug.log "going..." hex
-        upLeft = Dict.get (neighbor hex SE |> hashHex) gems
-        up = Dict.get (neighbor hex SW |> hashHex) gems
-        upRight = Dict.get (neighbor hex W |> hashHex) gems
-        downRight = Dict.get (neighbor hex NW |> hashHex) gems
-        down = Dict.get (neighbor hex NE |> hashHex) gems
-        downLeft = Dict.get (neighbor hex E |> hashHex) gems
+        neighborExists direction = getNeighborGem hex direction gems /= Nothing
+        upLeft = neighborExists SE
+        up = neighborExists SW
+        downRight = neighborExists NW
+        down = neighborExists NE
+        downLeft = neighborExists E
+        go =     if upLeft && down then Just (Nothing, SE) -- go upLeft
+            else if not upLeft && not up && downLeft then Just (Nothing, E) -- go downLeft
+            else if not upLeft && down && not downLeft then Just (Nothing, NE) -- go down
+            else if up && not down && downRight then Just (Just hex, NW) -- add and go downRight
+            else if upLeft && up && not down && not downRight then Just (Just hex, W) -- = bottom line, lower --> add and go upRight
+            else Nothing -- end
     in
-        if upLeft /= Nothing && down /= Nothing then
-            getBottom (neighbor hex SE) gems -- go upLeft
-        else if upLeft == Nothing && up == Nothing && downLeft /= Nothing then
-            getBottom (neighbor hex E) gems -- go downLeft
-        else if upLeft == Nothing && down /= Nothing && downLeft == Nothing then
-            getBottom (neighbor hex NE) gems -- go down
-        else if up /= Nothing && down == Nothing && downRight /= Nothing then
-            hex :: getBottom (neighbor hex NW) gems -- go downRight
-        else if upLeft /= Nothing && up /= Nothing && down == Nothing && downRight == Nothing then -- = bottom line, lower
-            hex :: getBottom (neighbor hex W) gems -- go upRight
-        else
-            [] -- end
+        case go of
+            Just (Just addHex, direction) -> addHex :: (buildBottomLine (Hex.neighbor hex direction) gems)
+            Just (Nothing, direction) -> buildBottomLine (Hex.neighbor hex direction) gems
+            Nothing -> []
 
+getNeighborGem hex direction gems =
+    Dict.get (Hex.neighbor hex direction |> HexMap.hashHex) gems
 
 dropIt : List Hex.Hex -> Model -> Model
 dropIt bottomLine model =
@@ -164,30 +184,29 @@ dropIt bottomLine model =
 
 dropInCol colBottomHex model =
     let
-        hexUp = getGridUp colBottomHex
+        hexUp = hexNeighborUp colBottomHex
         gem = Dict.get (HexMap.hashHex colBottomHex) model.gems
     in
         case gem of
             Just (Gem.Color c) -> dropInCol hexUp model
             Just (Gem.Empty) -> findDrop colBottomHex hexUp model |> dropInCol hexUp
-            default -> model -- border reached
+            default -> model -- matched or border reached
 
 findDrop dropToHex checkHex model =
     let
-        up = getGridUp checkHex
-        --dbg = Debug.log "HEREEE0" (dropToHex, checkHex)
+        up = hexNeighborUp checkHex
         gem = Dict.get (HexMap.hashHex checkHex) model.gems
     in
         case gem of
-            Just (Gem.Color c) -> { model | gems = (setGemFromHex dropToHex (Gem.Color c) model.gems |> setGemFromHex checkHex (Gem.Empty)) }
+            Just (Gem.Color c) -> { model | gems = (setGemAtHex dropToHex (Gem.Color c) model.gems |> setGemAtHex checkHex (Gem.Empty)) }
             Just (Gem.Empty) -> findDrop dropToHex up model
-            default -> model -- border reached
+            default -> model -- matched or border reached
 
-setGemFromHex hex gem gems =
+setGemAtHex hex gem gems =
     Dict.insert (HexMap.hashHex hex) gem gems
 
-getGridUp hex =
-    neighbor hex SW
+hexNeighborUp hex =
+    Hex.neighbor hex SW
 
 runElimination hexes model =
     case hexes of
@@ -196,8 +215,7 @@ runElimination hexes model =
 
 eliminateFrom (hash, hex) model =
     let
-        dbg = Debug.log "ELIMINATEFROM" hex
-        gem = (getExistingGem hash model.gems)
+        gem = (getExistingGem hex model.gems)
     in
         if Gem.isColor gem then
             scan model gem hex []
@@ -205,20 +223,22 @@ eliminateFrom (hash, hex) model =
         else model
 
 eliminateFound model found =
-    let
-        x = Debug.log "TO BE ELIMIATED" found
-    in
-        if (List.length found) >= minMatchLength then
-            { model | gems = model.grid
-                |> Dict.map (\hash hex ->
-                    if List.member hex found then (Debug.log "EMPTY IT" Gem.Empty)
-                    else (getExistingGem hash model.gems))
-            }
-        else model
+    if (List.length found) >= minMatchLength then
+        { model | gems = model.grid
+            |> Dict.map (\hash hex ->
+                let
+                    gem = getExistingGem hex model.gems
+                in
+                    if List.member hex found then
+                        Gem.colorToMatched gem
+                    else gem
+            )
+        }
+    else model
 
+scan : Model -> Gem.Gem -> Hex.Hex -> List Hex.Hex -> List Hex.Hex
 scan model scanGem fromHex found =
     let
-        --x = Debug.log "SCAN" (fromHex, found)
         visited = List.member fromHex found
         fromHash = HexMap.hashHex fromHex
         candidate = (not visited) && case (Dict.get fromHash model.gems) of
@@ -226,44 +246,31 @@ scan model scanGem fromHex found =
             Nothing -> False -- we reached the border...
         f = if candidate then fromHex :: found else found
     in
-        --if List.filter found  |> List.length > 0
         if candidate then f
-            |> scan model scanGem (neighbor fromHex (Debug.log "SCANDIR" NE))
-            |> scan model scanGem (neighbor fromHex (Debug.log "SCANDIR" E))
-            |> scan model scanGem (neighbor fromHex (Debug.log "SCANDIR" SE))
-            |> scan model scanGem (neighbor fromHex (Debug.log "SCANDIR" SW))
-            |> scan model scanGem (neighbor fromHex (Debug.log "SCANDIR" W))
-            |> scan model scanGem (neighbor fromHex (Debug.log "SCANDIR" NW))
+            |> scan model scanGem (Hex.neighbor fromHex NE)
+            |> scan model scanGem (Hex.neighbor fromHex E)
+            |> scan model scanGem (Hex.neighbor fromHex SE)
+            |> scan model scanGem (Hex.neighbor fromHex SW)
+            |> scan model scanGem (Hex.neighbor fromHex W)
+            |> scan model scanGem (Hex.neighbor fromHex NW)
         else f
 
-swapGems (hashTarget, _) model =
-    let
-        (hashDragged, _, gemDragged) = getDragged model
-        gemTarget = getExistingGem hashTarget model.gems
-        gems1 = model.gems
-            |> Dict.insert hashDragged gemTarget
-            |> Dict.insert hashTarget gemDragged
-    in
-        { model | gems = gems1 }
+swapGems gemDragged gemTarget hexDragged hexTarget model =
+    { model | gems = model.gems
+         |> Dict.insert (HexMap.hashHex hexDragged) gemTarget
+         |> Dict.insert (HexMap.hashHex hexTarget) gemDragged }
 
-getDragged model =
-    case model.dragged of
-        Just dragged -> dragged
-        Nothing -> Debug.crash "Not possible: getDragged"
-
---getHex hash model =
---    case model.grid of
---        Just hex -> hex
---        Nothing -> Debug.crash "Not possible: getHex"
-
-getExistingGem hash gems =
-    case (Dict.get hash gems) of
+getExistingGem hex gems =
+    case (Dict.get (HexMap.hashHex hex) gems) of
        Just gem -> gem
-       Nothing -> Debug.crash ("Not possible: getGem " ++ (toString hash) ++ (toString gems))
+       Nothing -> Debug.crash ("Not possible: getGem " ++ (toString hex) ++ (toString gems))
+
+highlightDraged hex gems =
+    Dict.insert (HexMap.hashHex hex) Gem.Dragged gems
 
 unhighlight model =
     { model | gems = case model.dragged of
-         Just (hash, hex, gem) -> Dict.insert hash gem model.gems
+         Just (hex, gem) -> Dict.insert (HexMap.hashHex hex) gem model.gems
          Nothing -> model.gems, dragged = Nothing
      }
 
@@ -276,30 +283,27 @@ rollAll hexMap =
 rollHex hash =
     Random.generate (NewFace hash) (Random.int 1 numberOfGems)
 
-highlightDraged draggedHash gems =
-    Dict.insert draggedHash Gem.Dragged gems
-
 
 -- VIEW
 
 view : Model -> Html Msg
 view model =
-    let
-        dbg = model --Debug.log "VIEW - model.gems" model.gems
-    in
-        div [ HtmlA.style [("margin-left", "500px"), ("border", "1px solid red")] ]
-            [ div [ id "board" ]
-                [ model.grid
-                    |> Dict.map (\k v -> drawShape (Dict.get k model.gems) (HexL.hexToPoint model.layout v) (DragStart (k, v)) (DragEnd (k, v)))
-                    |> Dict.values
-                    |> drawContainer
-                ]
-            , button [ onClick Roll ] [ Html.text "Roll" ]
+    div [ HtmlA.align "center", HtmlA.class (if model.dirty then "working" else "play") ]
+        [ Html.node "link" [ HtmlA.rel "stylesheet", HtmlA.href "/res/styles.css" ] []
+        , div [ id "board" ]
+            [ model.grid
+                |> Dict.map (\k v -> drawShape (Dict.get k model.gems) (Grid.drawPosition model.layout v) (DragStart (k, v)) (DragEnd (k, v)))
+                |> Dict.values
+                |> drawContainer
             ]
+        , h3 [ HtmlA.align "center" ]
+            [ Html.text (if model.dirty then "Working... please wait..." else "Play!") ]
+        , button [ onClick Roll ] [ Html.text "Reroll Gems!" ]
+        ]
 
 
 -- SUBSCRIPTIONS
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Time.every (millisecond*500) Tick
+  Time.every (millisecond*configTickDelayMs) Tick

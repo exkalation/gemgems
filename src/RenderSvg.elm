@@ -14,29 +14,35 @@ base =
     |> String.join ", "
 
 drawContainer =
-    svg [ width "600", height "600", viewBox "0 0 600 600" ]
+    svg [ width "500", height "520", viewBox "0 0 500 520", stroke "#f00" ]
 
-gemToColor gem =
+gemToColor gem xs ys =
     case gem of
-        Just (Gem.Color 1) -> "#9B111E" -- ruby red #9B111E / red #f00
-        Just (Gem.Color 2) -> "#0c0" -- emerald #50C878 / green #0c0
-        Just (Gem.Color 3) -> "#0F52BA" -- sapphire #0F52BA / blue #07a
-        Just (Gem.Color 4) -> "#ff0" -- yellow
-        Just (Gem.Color 5) -> "#f30" -- orange
-        Just (Gem.Color 6) -> "#909" -- violet
-        Just (Gem.Color 7) -> "#963" -- ??
-        Just (Gem.Color 8) -> "#06c" -- ??
-        Just Gem.Dragged -> "#fff" -- dragged
-        Just Gem.Empty -> "#aaa" -- eliminated/empty
-        Nothing -> "#000"
-        default -> Debug.crash "Unhandled shape tpye!"
+        Just (Gem.Color x) -> ("type-" ++ (toString x), [])
+        Just (Gem.Matched x) -> ("matched type-" ++ (toString x),
+            [ animateTransform
+                 [ attributeName "transform"
+                 , SvgA.type_ "rotate"
+                 , from ("0 " ++ ys ++ " " ++ xs)
+                 , to ("360 " ++ ys ++ " " ++ xs)
+                 , dur "1s", repeatCount "indefinite"
+                 ] []
+             , animateTransform
+                [ attributeName "transform"
+                , SvgA.type_ "scale"
+                , from "0.91" , to "0.1"
+                , begin "0s", dur "1s", repeatCount "1"
+                ] []
+             ])
+        Just Gem.Dragged -> ("type-dragged", [])
+        Just Gem.Empty -> ("type-empty", [])
+        Nothing -> ("type-empty", [])
 
 drawShape gemType (x, y) msgDown msgUp =
     let
-        (dx, dy) = (y, x)
-        color = gemToColor gemType
+        (color, animations) = gemToColor gemType (toString 50) (toString 50)
     in
-        g [ transform ("translate(" ++ (toString dx) ++ "," ++ (toString dy) ++ ") scale(0.91)") ]
-        [ polygon [ fill color, SvgA.stroke "#000", onMouseDown msgDown, onMouseUp msgUp, points base ] []
+        g [ transform ("translate(" ++ (toString x) ++ "," ++ (toString y) ++ ") scale(0.91)") ]
+        [ polygon [ class color, SvgA.stroke "#000", onMouseDown msgDown, onMouseUp msgUp, points base ]
+            animations
         ]
-
