@@ -1,10 +1,9 @@
 module RenderSvg exposing (..)
 
-import Json.Decode as Json exposing (succeed)
 import Svg exposing (..)
 import Svg.Attributes as SvgA exposing (..)
 import Svg.Events as SvgE exposing (..)
-import Gem exposing (..)
+import Gem
 
 
 base : String
@@ -14,35 +13,32 @@ base =
     |> String.join ", "
 
 drawContainer =
-    svg [ width "500", height "520", viewBox "0 0 500 520", stroke "#f00" ]
+    svg [ width "420", height "560", viewBox "0 0 420 560", stroke "#f00" ]
 
 gemToColor gem xs ys =
     case gem of
-        Just (Gem.Color x) -> ("type-" ++ (toString x), [])
-        Just (Gem.Matched x) -> ("matched type-" ++ (toString x),
-            [ animateTransform
-                 [ attributeName "transform"
-                 , SvgA.type_ "rotate"
-                 , from ("0 " ++ ys ++ " " ++ xs)
-                 , to ("360 " ++ ys ++ " " ++ xs)
-                 , dur "1s", repeatCount "indefinite"
-                 ] []
-             , animateTransform
-                [ attributeName "transform"
-                , SvgA.type_ "scale"
-                , from "0.91" , to "0.1"
-                , begin "0s", dur "1s", repeatCount "1"
-                ] []
-             ])
-        Just Gem.Dragged -> ("type-dragged", [])
-        Just Gem.Empty -> ("type-empty", [])
-        Nothing -> ("type-empty", [])
+        Just (Gem.Color c) -> (Gem.toString (Gem.Color c), "color type-" ++ (toString c), [])
+        Just (Gem.Matched c) -> (Gem.toString (Gem.Matched c), "matched type-" ++ (toString c), [])
+        Just Gem.Dragged -> (Gem.toString Gem.Dragged, "type-dragged", [])
+        Just Gem.Empty -> (Gem.toString Gem.Empty, "type-empty", [])
+        Nothing -> ("Nothing", "type-empty", [])
 
 drawShape gemType (x, y) msgDown msgUp =
     let
-        (color, animations) = gemToColor gemType (toString 50) (toString 50)
+        (zz, color, animations) = gemToColor gemType (toString 50) (toString 50)
     in
-        g [ transform ("translate(" ++ (toString x) ++ "," ++ (toString y) ++ ") scale(0.91)") ]
-        [ polygon [ class color, SvgA.stroke "#000", onMouseDown msgDown, onMouseUp msgUp, points base ]
-            animations
-        ]
+        g [ id ("id-g-" ++ zz ++ "-" ++ (toString x) ++ "-" ++ (toString y)), transform ("translate(" ++ (toString x) ++ "," ++ (toString y) ++ ")") ]
+            [ polygon [ id ("id-p-" ++ zz ++ "-" ++ (toString x) ++ "-" ++ (toString y) ++ "-" ++ color), class color, SvgA.stroke "#000", onMouseDown msgDown, onMouseUp msgUp, points base ]
+                animations
+            ]
+
+{-
+animateTransform
+                               [ attributeName "transform"
+                               , SvgA.type_ "translate"
+                               , from ((toString x) ++ " 0")
+                               , to ((toString x) ++ " " ++ (toString y))
+                               , dur "0.2s", repeatCount "1"
+                               ] []
+            ,
+-}

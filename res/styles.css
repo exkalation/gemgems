@@ -5,24 +5,37 @@ body {
 
 div.play, div.working{
     background-color: #eee;
-    /*margin: 20px auto;*/
-    padding: 20px;
-    /*width: 380px;*/
+    margin: 20px auto;
+    padding: 10px 20px;
+    width: 420px;
 }
 div.working{
     background-color: #aaa;
 }
 
 polygon {
+    stroke: #000;
     transition: transform;
     -webkit-transition: transform;
     transition-duration: 1s;
     -webkit-transition-duration: 1s;
     transform-origin: 50% 50%;
     -webkit-transform-origin: 50% 50%;
-    transform: none;
+    -moz-transform-origin: 50px 50px;
+    -webkit-animation-iteration-count: 4;
+    /*transform: none;
     -webkit-transform: none;
+    transform: translate(0, 50%);
+    -webkit-transform: translate(0, 50%);*/
 }
+polygon.color {
+    animation: fade-in 1s linear 1;
+}
+@keyframes fade-in {
+    0%   {transform: translateY(-500px)}
+    100% {transform: translateY(0)}
+}
+
 polygon.type-1 { fill: #9B111E; } /*ruby red #9B111E / red #f00*/
 polygon.type-2 { fill: #0c0; } /*emerald #50C878 / green #0c0*/
 polygon.type-3 { fill: #0F52BA; } /*sapphire #0F52BA / blue #07a*/
@@ -36,8 +49,6 @@ polygon.type-empty { fill: #aaa; }
 polygon.matched{
     transform: rotate(180deg) scale(0);
     -webkit-transform: rotate(180deg) scale(0);
-    transform-origin: 50% 50%;
-    -webkit-transform-origin: 50% 50%;
 }
 polygon:hover{
     stroke: white;
