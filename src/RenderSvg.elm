@@ -20,12 +20,16 @@ gemToColor gem xs ys =
         Just (Gem.Color c) -> (Gem.toString (Gem.Color c), "color type-" ++ (toString c), [])
         Just (Gem.Matched c) -> (Gem.toString (Gem.Matched c), "matched type-" ++ (toString c), [])
         Just Gem.Dragged -> (Gem.toString Gem.Dragged, "type-dragged", [])
+        Just (Gem.Moving c y) -> (Gem.toString (Gem.Moving c y), "type-moving color type-" ++ (toString c), [])
         Just Gem.Empty -> (Gem.toString Gem.Empty, "type-empty", [])
         Nothing -> ("Nothing", "type-empty", [])
 
-drawShape gemType (x, y) msgDown msgUp =
+drawShape gemType (x, y2) msgDown msgUp =
     let
         (zz, color, animations) = gemToColor gemType (toString 50) (toString 50)
+        y = case gemType of
+            Just (Gem.Moving _ dist) -> y2 - dist
+            default -> y2
     in
         g [ id ("id-g-" ++ zz ++ "-" ++ (toString x) ++ "-" ++ (toString y)), transform ("translate(" ++ (toString x) ++ "," ++ (toString y) ++ ")") ]
             [ polygon [ id ("id-p-" ++ zz ++ "-" ++ (toString x) ++ "-" ++ (toString y) ++ "-" ++ color), class color, SvgA.stroke "#000", onMouseDown msgDown, onMouseUp msgUp, points base ]

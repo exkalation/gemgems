@@ -15,7 +15,10 @@ import RenderSvg as Render exposing (..)
 import Gem
 import Grid
 
-configTickDelayMs = 10*100
+configTickDelayMs = 1*20
+moveTicks = 25
+reduceDistanceFactor = 1.3
+reduceDistanceAbsolute = 1
 minMatchLength = 4
 numberOfGems = 7
 lengthToScore len =
@@ -39,6 +42,7 @@ type alias Model =
     , layout: HexL.Layout
     , dragged: Maybe (Hex.Hex, Gem.Gem)
     , dirty: Bool -- the model is dirty if gems can be matched, or the grid has matched/empty places
+    , tickCounter: Int
     , bottomLine: List Hex.Hex
     , score: Int
     }
@@ -54,6 +58,7 @@ init =
             (HexL.Layout (HexL.orientationLayoutPointy) (42, 42) (0, 0))
             Nothing
             False
+            0
             []
             0
         , rollAll grid)
@@ -72,6 +77,7 @@ type Msg
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model0 =
     let
+        x = Debug.log "action"
         model =
             if List.isEmpty model0.bottomLine then { model0 | bottomLine = Grid.buildBottomLine (Hex.IntCubeHex (0,0,0)) model0.gems }
             else model0
@@ -93,15 +99,36 @@ update msg model0 =
                 handleDragEnd hex model
 
             Tick time ->
-                if model.dirty then
+                if model.tickCounter < moveTicks then
+                    ({ model | tickCounter = model.tickCounter+1, gems = (moveMovingGems model.gems) }, Cmd.none)
+                else if model.dirty then
                     let
                         m1 = markMatchedEmpty model -- do it backwards, to only do one step per tick
                         m2 = if m1.gems == model.gems then dropIt model.bottomLine model else m1
                         cmds = if m2.gems == model.gems then recolorGrid model.gems else []
                         m3 = if m2.gems == model.gems && List.isEmpty cmds then runElimination (Dict.toList model.grid) model else m2
                     in
-                        ({ m3 | dirty = isDirty model }, Cmd.batch cmds)
-                else (model, Cmd.none)
+                        ({ m3 | dirty = isDirty model, tickCounter = 0 }, Cmd.batch cmds)
+                else ({ model | tickCounter = 0 }, Cmd.none)
+
+moveMovingGems gems =
+    gems
+        |> Dict.map moveMovingGem
+
+moveMovingGem _ gem =
+    case gem of
+        Gem.Moving c dist ->
+            let
+                newDist = reduceDistance dist
+            in
+                if newDist == 0 then Gem.Color c else Gem.Moving c newDist
+        default -> gem
+
+reduceDistance dist =
+    let
+        dx = dist / reduceDistanceFactor
+    in
+        if dx <= reduceDistanceAbsolute then 0 else dx - reduceDistanceAbsolute
 
 handleDragStart hex model =
     let
@@ -171,7 +198,7 @@ findDrop dropToHex checkHex model =
         gem = Dict.get (HexMap.hashHex checkHex) model.gems
     in
         case gem of
-            Just (Gem.Color c) -> { model | gems = (setGemAtHex dropToHex (Gem.Color c) model.gems |> setGemAtHex checkHex (Gem.Empty)) }
+            Just (Gem.Color c) -> { model | gems = (setGemAtHex dropToHex (Gem.Moving c (Grid.getDiffY model.layout checkHex dropToHex)) model.gems |> setGemAtHex checkHex (Gem.Empty)) }
             Just (Gem.Empty) -> findDrop dropToHex up model
             default -> model -- matched or border reached
 

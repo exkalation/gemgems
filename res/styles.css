@@ -22,18 +22,7 @@ polygon {
     transform-origin: 50% 50%;
     -webkit-transform-origin: 50% 50%;
     -moz-transform-origin: 50px 50px;
-    -webkit-animation-iteration-count: 4;
-    /*transform: none;
-    -webkit-transform: none;
-    transform: translate(0, 50%);
-    -webkit-transform: translate(0, 50%);*/
-}
-polygon.color {
-    animation: fade-in 1s linear 1;
-}
-@keyframes fade-in {
-    0%   {transform: translateY(-500px)}
-    100% {transform: translateY(0)}
+    /*-webkit-animation-iteration-count: 4;*/
 }
 
 polygon.type-1 { fill: #9B111E; } /*ruby red #9B111E / red #f00*/
@@ -45,6 +34,7 @@ polygon.type-6 { fill: #909; } /*violet*/
 polygon.type-7 { fill: #963; }
 polygon.type-8 { fill: #06c; }
 polygon.type-dragged { fill: #fff; }
+polygon.type-moving { stroke-width: 2px; /*fill: #0ff;*/ }
 polygon.type-empty { fill: #aaa; }
 polygon.matched{
     transform: rotate(180deg) scale(0);

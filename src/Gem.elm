@@ -1,6 +1,6 @@
 module Gem exposing (..)
 
-type Gem = Empty | Dragged | Matched Int | Color Int
+type Gem = Empty | Dragged | Matched Int | Color Int | Moving Int Float
 
 isColor gem =
     case (gem) of
@@ -28,5 +28,6 @@ toString gem =
     case gem of
         Color c -> "Color-" ++ (toStringElmBugWorkaround c)
         Matched c -> "Matched-" ++ (toStringElmBugWorkaround c)
+        Moving c _ -> "Moving-" ++ (toStringElmBugWorkaround c)
         Empty -> "Empty"
         Dragged -> "Dragged"

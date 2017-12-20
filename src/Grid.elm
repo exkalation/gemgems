@@ -12,6 +12,13 @@ drawPosition layout hex =
     let (x, y) = HexL.hexToPoint layout hex
     in (y, x)
 
+getDiffY layout fromHex toHex =
+    let
+        (_, y1) = drawPosition layout fromHex
+        (_, y2) = drawPosition layout toHex
+    in
+        y2 - y1
+
 buildBottomLine : Hex.Hex -> Dict.Dict HexMap.Hash Gem.Gem -> List Hex.Hex
 buildBottomLine hex gems =
     let
