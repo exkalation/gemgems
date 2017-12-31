@@ -7,23 +7,19 @@ import Html.Events exposing (..)
 import Random
 import Dict
 
+import Pointer
 import Hexagons.Map as HexMap
 import Hexagons.Layout as HexL
 import Hexagons.Hex as Hex exposing (Direction(..))
 
+import Config
 import RenderSvg as Render exposing (..)
 import Gem
 import Grid
 
-configTickDelayMs = 1*20
-moveTicks = 25
-reduceDistanceFactor = 1.3
-reduceDistanceAbsolute = 1
-minMatchLength = 4
-numberOfGems = 7
 lengthToScore len =
-    if len <= minMatchLength then len
-    else len + (len - minMatchLength) * 5
+    if len <= Config.minMatchLength then len
+    else len + (len - Config.minMatchLength) * 5
 
 main =
     Html.program
@@ -55,7 +51,7 @@ init =
         (Model
             Dict.empty
             grid
-            (HexL.Layout (HexL.orientationLayoutPointy) (42, 42) (0, 0))
+            (HexL.Layout (HexL.orientationLayoutPointy) (42, 42) (5, 5))
             Nothing
             False
             0
@@ -69,9 +65,10 @@ init =
 type Msg
     = Roll
    | NewFace HexMap.Hash Int
-   | DragStart Hex.Hex
-   | DragEnd Hex.Hex
+   | DragStart Hex.Hex Pointer.Event
+   | DragEnd Hex.Hex Pointer.Event
    | Tick Time
+   | Nop Pointer.Event
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -89,17 +86,20 @@ update msg model0 =
             NewFace (a, b, c) newFace ->
                 ({ model | dirty = True, gems = Dict.insert (a, b, c) (Gem.Color newFace) model.gems }, Cmd.none)
 
-            DragStart hex ->
+            DragStart hex ev ->
                 if model.dirty || model.dragged /= Nothing then
                     (model, Cmd.none)
                 else
                     handleDragStart hex model
 
-            DragEnd hex ->
-                handleDragEnd hex model
+            DragEnd hex ev ->
+                let
+                    (_, _, hexT) = Debug.log "XXXXXXXXX" (ev, hex, Grid.getHexAt model.layout ev.pointer.offsetPos)
+                in
+                handleDragEnd hexT model
 
             Tick time ->
-                if model.tickCounter < moveTicks then
+                if model.tickCounter < Config.moveTicks then
                     ({ model | tickCounter = model.tickCounter+1, gems = (moveMovingGems model.gems) }, Cmd.none)
                 else if model.dirty then
                     let
@@ -111,9 +111,11 @@ update msg model0 =
                         ({ m3 | dirty = isDirty model, tickCounter = 0 }, Cmd.batch cmds)
                 else ({ model | tickCounter = 0 }, Cmd.none)
 
+            Nop x ->
+                (model, Cmd.none)
+
 moveMovingGems gems =
-    gems
-        |> Dict.map moveMovingGem
+    Dict.map moveMovingGem gems
 
 moveMovingGem _ gem =
     case gem of
@@ -126,9 +128,9 @@ moveMovingGem _ gem =
 
 reduceDistance dist =
     let
-        dx = dist / reduceDistanceFactor
+        dx = dist / Config.reduceDistanceFactor
     in
-        if dx <= reduceDistanceAbsolute then 0 else dx - reduceDistanceAbsolute
+        if dx <= Config.reduceDistanceAbsolute then 0 else dx - Config.reduceDistanceAbsolute
 
 handleDragStart hex model =
     let
@@ -223,7 +225,7 @@ eliminateFrom (hash, hex) model =
         else model
 
 eliminateFound model found =
-    if (List.length found) >= minMatchLength then
+    if (List.length found) >= Config.minMatchLength then
         { model | gems = model.grid
             |> Dict.map (\hash hex ->
                 let
@@ -281,15 +283,23 @@ rollAll hexMap =
         |> Cmd.batch
 
 rollHex hash =
-    Random.generate (NewFace hash) (Random.int 1 numberOfGems)
+    Random.generate (NewFace hash) (Random.int 1 Config.numberOfGems)
 
 
 -- VIEW
 
 view : Model -> Html Msg
 view model =
-    div [ HtmlA.align "center", HtmlA.class (if model.dirty then "working" else "play") ]
-        [ Html.node "link" [ HtmlA.rel "stylesheet", HtmlA.href "/res/styles.css" ] []
+    let prefix = "" in
+    div [ HtmlA.id "game"
+        , HtmlA.align "center"
+        , HtmlA.classList [ ("game", True), ("working", model.dirty), ("play", not model.dirty) ]
+        , Pointer.onDown Nop
+        , Pointer.onMove Nop
+        , Pointer.onUp Nop
+        , HtmlA.attribute "elm-pep" "true"
+        ]
+        [ Html.node "link" [ HtmlA.rel "stylesheet", HtmlA.href (prefix ++ "/res/styles.css") ] []
         , div [ id "board", HtmlA.align "center" ]
             [ model.grid
                 |> Dict.map (\hash hex -> drawShape (Dict.get hash model.gems) (Grid.drawPosition model.layout hex) (DragStart hex) (DragEnd hex))
@@ -298,7 +308,9 @@ view model =
             ]
         , h3 [ HtmlA.align "center" ]
             [ Html.text (if model.dirty then "Working... please wait..." else "Play!") ]
-        , button [ onClick Roll ] [ Html.text "Reroll Gems!" ]
+        , button [ onClick Roll ] [ Html.text "Reroll gems!" ]
+        , p [ HtmlA.align "center" ]
+            [ Html.text "Match four gems by switching two neighbouring gems (drag and drop)." ]
         ]
 
 
@@ -306,4 +318,4 @@ view model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Time.every (millisecond*configTickDelayMs) Tick
+  Time.every (millisecond * Config.tickDelayMs) Tick

@@ -1,8 +1,10 @@
 module RenderSvg exposing (..)
 
+import Html.Attributes as HtmlA exposing (attribute)
 import Svg exposing (..)
 import Svg.Attributes as SvgA exposing (..)
 import Svg.Events as SvgE exposing (..)
+import Pointer
 import Gem
 
 base : String
@@ -27,12 +29,22 @@ drawShape gemType (x, y) msgDown msgUp =
     let
         gs = Maybe.withDefault Gem.Empty gemType |> Gem.toString
         color = gemToColor gemType
-        yy = case gemType of
+        y_ = case gemType of
             Just (Gem.Moving _ dist) -> y - dist
             default -> y
-        (xs, ys) = (toString x, toString yy)
+        (xs, ys) = (toString x, toString y_)
         gids = "id-g-" ++ gs ++ "-" ++ xs ++ "-" ++ ys
         pids = gids ++ color
     in
         g [ id gids, transform ("translate(" ++ xs ++ "," ++ ys ++ ")") ]
-            [ polygon [ id pids, class color, SvgA.stroke "#000", onMouseDown msgDown, onMouseUp msgUp, points base ] []]
+        [ polygon
+            [ id pids
+                , class color
+                , SvgA.stroke "#000"
+                , Pointer.onDown msgDown
+                --, SvgE.onMouseUp msgUp
+                , Pointer.onUp msgUp
+                , HtmlA.attribute "elm-pep" "true"
+                , points base ]
+            []
+        ]

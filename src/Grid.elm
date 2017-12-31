@@ -1,16 +1,21 @@
 module Grid exposing (..)
 
 import Dict
+
 import Hexagons.Hex as Hex exposing (Direction(..))
 import Hexagons.Map as HexMap
 import Hexagons.Layout as HexL
 
 import Gem
+import Config
 
+flipCoords (x, y) =
+    (y, x)
+    --(x, y)
 
 drawPosition layout hex =
-    let (x, y) = HexL.hexToPoint layout hex
-    in (y, x)
+    HexL.hexToPoint layout hex
+    |> flipCoords
 
 getDiffY layout fromHex toHex =
     let
@@ -18,6 +23,16 @@ getDiffY layout fromHex toHex =
         (_, y2) = drawPosition layout toHex
     in
         y2 - y1
+
+getHexAt layout (x, y) =
+    (x, y)
+    |> flipCoords
+    |> pointerOffsetToGridPos
+    |> HexL.pointToHex layout
+    |> Hex.toIntHex
+
+pointerOffsetToGridPos (x, y) =
+    (x - Config.hexHalfWidth, y - Config.hexHalfHeight)
 
 buildBottomLine : Hex.Hex -> Dict.Dict HexMap.Hash Gem.Gem -> List Hex.Hex
 buildBottomLine hex gems =

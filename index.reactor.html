@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>gemgems</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="res/styles.css"/>
+    <script src="_compile/src/Main.elm"></script>
+    <!--script src="gemgems.js"></script-->
+    <script src="res/elm-pep.js"></script>
+    <script>
+        setTimeout(function(){ document.getElementById('game').addEventListener('touchstart', function(e){ e.preventDefault(); }, false); }, 1000);
+    </script>
+</head>
+<body>
+<script charset="utf-8">const app = Elm.GemGems.fullscreen()</script>
+</body>
+</html>
