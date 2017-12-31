@@ -9,6 +9,7 @@ div.play, div.working{
     padding: 10px 20px;
     width: 420px;
 }
+
 div.working{
     background-color: #aaa;
 }
@@ -21,7 +22,7 @@ polygon {
     -webkit-transition-duration: 1s;
     transform-origin: 50% 50%;
     -webkit-transform-origin: 50% 50%;
-    -moz-transform-origin: 50px 50px;
+    -moz-transform-origin: 50% 50%;
     /*-webkit-animation-iteration-count: 4;*/
 }
 
