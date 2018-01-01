@@ -68,7 +68,6 @@ type Msg
    | DragStart Hex.Hex Pointer.Event
    | DragEnd Hex.Hex Pointer.Event
    | Tick Time
-   | Nop Pointer.Event
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -110,9 +109,6 @@ update msg model0 =
                     in
                         ({ m3 | dirty = isDirty model, tickCounter = 0 }, Cmd.batch cmds)
                 else ({ model | tickCounter = 0 }, Cmd.none)
-
-            Nop x ->
-                (model, Cmd.none)
 
 moveMovingGems gems =
     Dict.map moveMovingGem gems
@@ -290,28 +286,26 @@ rollHex hash =
 
 view : Model -> Html Msg
 view model =
-    let prefix = "" in
-    div [ HtmlA.id "game"
-        , HtmlA.align "center"
-        , HtmlA.classList [ ("game", True), ("working", model.dirty), ("play", not model.dirty) ]
-        , Pointer.onDown Nop
-        , Pointer.onMove Nop
-        , Pointer.onUp Nop
-        , HtmlA.attribute "elm-pep" "true"
-        ]
-        [ Html.node "link" [ HtmlA.rel "stylesheet", HtmlA.href (prefix ++ "/res/styles.css") ] []
-        , div [ id "board", HtmlA.align "center" ]
-            [ model.grid
-                |> Dict.map (\hash hex -> drawShape (Dict.get hash model.gems) (Grid.drawPosition model.layout hex) (DragStart hex) (DragEnd hex))
-                |> Dict.values
-                |> drawContainer
+    let
+        prefix = "/"
+    in
+        div [ HtmlA.id "game"
+            , HtmlA.align "center"
+            , HtmlA.classList [ ("game", True), ("working", model.dirty), ("play", not model.dirty) ]
             ]
-        , h3 [ HtmlA.align "center" ]
-            [ Html.text (if model.dirty then "Working... please wait..." else "Play!") ]
-        , button [ onClick Roll ] [ Html.text "Reroll gems!" ]
-        , p [ HtmlA.align "center" ]
-            [ Html.text "Match four gems by switching two neighbouring gems (drag and drop)." ]
-        ]
+            [ Html.node "link" [ HtmlA.rel "stylesheet", HtmlA.href (prefix ++ "res/styles.css") ] []
+            , div [ id "board", HtmlA.align "center" ]
+                [ model.grid
+                    |> Dict.map (\hash hex -> drawShape (Dict.get hash model.gems) (Grid.drawPosition model.layout hex) (DragStart hex) (DragEnd hex))
+                    |> Dict.values
+                    |> drawContainer
+                ]
+            , h3 [ HtmlA.align "center" ]
+                [ Html.text (if model.dirty then "Working... please wait..." else "Play!") ]
+            , button [ onClick Roll ] [ Html.text "Reroll gems!" ]
+            , p [ HtmlA.align "center" ]
+                [ Html.text "Match four gems by switching two neighbouring gems (drag and drop)." ]
+            ]
 
 
 -- SUBSCRIPTIONS
