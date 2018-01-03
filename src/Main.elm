@@ -93,22 +93,27 @@ update msg model0 =
 
             DragEnd hex ev ->
                 let
-                    (_, _, hexT) = Debug.log "XXXXXXXXX" (ev, hex, Grid.getHexAt model.layout ev.pointer.offsetPos)
+                    (_, hexT) = Debug.log "XXXXXXXXX" (hex, Grid.getHexAt model.layout ev.pointer.offsetPos)
                 in
-                handleDragEnd hexT model
+                    handleDragEnd hexT model
 
             Tick time ->
-                if model.tickCounter < Config.moveTicks then
-                    ({ model | tickCounter = model.tickCounter+1, gems = (moveMovingGems model.gems) }, Cmd.none)
-                else if model.dirty then
-                    let
-                        m1 = markMatchedEmpty model -- do it backwards, to only do one step per tick
-                        m2 = if m1.gems == model.gems then dropIt model.bottomLine model else m1
-                        cmds = if m2.gems == model.gems then recolorGrid model.gems else []
-                        m3 = if m2.gems == model.gems && List.isEmpty cmds then runElimination (Dict.toList model.grid) model else m2
-                    in
-                        ({ m3 | dirty = isDirty model, tickCounter = 0 }, Cmd.batch cmds)
-                else ({ model | tickCounter = 0 }, Cmd.none)
+                if model.dirty then
+                    tickTock model
+                else (model, Cmd.none)
+
+
+tickTock model =
+    if model.tickCounter < Config.moveTicks then
+        ({ model | tickCounter = model.tickCounter+1, gems = (moveMovingGems model.gems) }, Cmd.none)
+    else
+        let
+            m1 = markMatchedEmpty model
+                |> runElimination
+            m2 = if m1.gems == model.gems then dropIt model else m1 -- don't do at once, otherwise animations will be skipped
+            cmds = if m2.gems == model.gems then Cmd.batch <| recolorGrid model.gems else Cmd.none
+        in
+            ({ m2 | dirty = isDirty model, tickCounter = 0 }, cmds)
 
 moveMovingGems gems =
     Dict.map moveMovingGem gems
@@ -167,18 +172,25 @@ markMatchedEmpty model =
 
 isDirty model =
     (Dict.values model.gems
-    |> List.any Gem.isEmpty) || model /= (runElimination (Dict.toList model.grid) model)
+    |> List.any Gem.isEmpty) || model /= (runElimination model)
 
 recolorGrid gems =
     Dict.filter (\hash gem -> Gem.isEmpty gem) gems
     |> Dict.keys
     |> List.map rollHex
 
-dropIt : List Hex.Hex -> Model -> Model
-dropIt bottomLine model =
-    case bottomLine of
-        [] -> model
-        hex::rest -> dropInCol hex model |> dropIt rest
+dropIt : Model -> Model
+dropIt model =
+    let
+        recurse bottomLine model =
+            case bottomLine of
+                [] ->
+                    model
+                hex::rest ->
+                    dropInCol hex model
+                    |> recurse rest
+    in
+        recurse model.bottomLine model
 
 dropInCol colBottomHex model =
     let
@@ -206,12 +218,19 @@ setGemAtHex hex gem gems =
 hexNeighborUp hex =
     Hex.neighbor hex SW
 
-runElimination hexes model =
-    case hexes of
-        [] -> model
-        (hash, hex)::rest -> eliminateFrom (hash, hex) model |> runElimination rest
+runElimination model =
+    let
+        recurse hexes model =
+            case hexes of
+                [] ->
+                    model
+                (hash, hex)::rest ->
+                    eliminateFrom hex model
+                    |> recurse rest
+    in
+        recurse (Dict.toList model.grid) model
 
-eliminateFrom (hash, hex) model =
+eliminateFrom hex model =
     let
         gem = (getExistingGem hex model.gems)
     in

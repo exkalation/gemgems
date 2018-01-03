@@ -12,7 +12,6 @@ Quick and dirty code (c) by first time Elm user.
   * Replace hexagon SVGs with "real" gem icons
 * Notes on current topics
   * combine model.grid + model.gems?
-  * stop increasing counter when model not dirty (generates useless model updates)
   * split DragEnd into
     * TouchDragEnd, to handle touch drag end position and get the target hex, and
     * DragEnd, receiving the target hex as previously.
